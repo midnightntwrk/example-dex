@@ -3,70 +3,19 @@ import type * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
 export enum Token { foo = 0, bar = 1 }
 
 export type Witnesses<T> = {
-  amountsToSwap(context: __compactRuntime.WitnessContext<Ledger, T>): [T, [bigint,
-                                                                           bigint]];
 }
 
 export type ImpureCircuits<T> = {
-  mint(context: __compactRuntime.CircuitContext<T>, tk_0: Token): __compactRuntime.CircuitResults<T, { nonce: Uint8Array,
-                                                                                                       color: Uint8Array,
-                                                                                                       value: bigint
-                                                                                                     }>;
-  addLiquidity(context: __compactRuntime.CircuitContext<T>,
-               coin__0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): __compactRuntime.CircuitResults<T, bigint>;
-  removeLiquidity(context: __compactRuntime.CircuitContext<T>,
-                  token__0: Token,
-                  amount__0: bigint): __compactRuntime.CircuitResults<T, []>;
-  swapFooForBar(context: __compactRuntime.CircuitContext<T>,
-                fromCoin__0: { nonce: Uint8Array,
-                               color: Uint8Array,
-                               value: bigint
-                             }): __compactRuntime.CircuitResults<T, [bigint,
-                                                                     bigint]>;
-  swapBarForFoo(context: __compactRuntime.CircuitContext<T>,
-                fromCoin__0: { nonce: Uint8Array,
-                               color: Uint8Array,
-                               value: bigint
-                             }): __compactRuntime.CircuitResults<T, [bigint,
-                                                                     bigint]>;
 }
 
 export type PureCircuits = {
 }
 
 export type Circuits<T> = {
-  mint(context: __compactRuntime.CircuitContext<T>, tk_0: Token): __compactRuntime.CircuitResults<T, { nonce: Uint8Array,
-                                                                                                       color: Uint8Array,
-                                                                                                       value: bigint
-                                                                                                     }>;
-  addLiquidity(context: __compactRuntime.CircuitContext<T>,
-               coin__0: { nonce: Uint8Array, color: Uint8Array, value: bigint }): __compactRuntime.CircuitResults<T, bigint>;
-  removeLiquidity(context: __compactRuntime.CircuitContext<T>,
-                  token__0: Token,
-                  amount__0: bigint): __compactRuntime.CircuitResults<T, []>;
-  swapFooForBar(context: __compactRuntime.CircuitContext<T>,
-                fromCoin__0: { nonce: Uint8Array,
-                               color: Uint8Array,
-                               value: bigint
-                             }): __compactRuntime.CircuitResults<T, [bigint,
-                                                                     bigint]>;
-  swapBarForFoo(context: __compactRuntime.CircuitContext<T>,
-                fromCoin__0: { nonce: Uint8Array,
-                               color: Uint8Array,
-                               value: bigint
-                             }): __compactRuntime.CircuitResults<T, [bigint,
-                                                                     bigint]>;
 }
 
 export type Ledger = {
-  readonly counter: bigint;
-  readonly fooNonce: Uint8Array;
-  readonly barNonce: Uint8Array;
-  readonly fooTotalSupply: bigint;
-  readonly barTotalSupply: bigint;
   readonly admin: { bytes: Uint8Array };
-  readonly fooColor: Uint8Array;
-  readonly barColor: Uint8Array;
   alreadyMinted: {
     isEmpty(): boolean;
     size(): bigint;
@@ -80,8 +29,6 @@ export type Ledger = {
     lookup(key_0: [{ bytes: Uint8Array }, Token]): bigint;
     [Symbol.iterator](): Iterator<[[{ bytes: Uint8Array }, Token], bigint]>
   };
-  readonly fooPool: bigint;
-  readonly barPool: bigint;
 }
 
 export type ContractReferenceLocations = any;
@@ -94,7 +41,9 @@ export declare class Contract<T, W extends Witnesses<T> = Witnesses<T>> {
   impureCircuits: ImpureCircuits<T>;
   constructor(witnesses: W);
   initialState(context: __compactRuntime.ConstructorContext<T>,
-               initialNonce_0: Uint8Array): __compactRuntime.ConstructorResult<T>;
+               names_0: [string, string],
+               symbols_0: [string, string],
+               fixedSupply_0: bigint): __compactRuntime.ConstructorResult<T>;
 }
 
 export declare function ledger(state: __compactRuntime.StateValue): Ledger;

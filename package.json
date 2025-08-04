@@ -5,8 +5,8 @@
   "main": "index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "compile": "compactc contract/contract.compact contract/managed",
-    "verify-contract": "compactc --skip-zk contract/contract.compact contract/no-zk",
+    "compile-contract": "compact compile contract/contract.compact contract/managed",
+    "verify-contract": "compact compile --skip-zk contract/contract.compact contract/no-zk",
     "watch-compile": "nodemon --exec \"npm run verify-contract\" --ext compact"
   },
   "repository": {
