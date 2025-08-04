@@ -1,0 +1,246 @@
+pragma language_version >= 0.16;
+
+import CompactStandardLibrary;
+
+export enum Token { foo, bar }
+
+export ledger counter: Counter;
+export ledger fooNonce: Bytes<32>;
+export ledger barNonce: Bytes<32>;
+export ledger fooTotalSupply: Uint<128>;
+export ledger barTotalSupply: Uint<128>;
+export sealed ledger admin: ZswapCoinPublicKey;
+export sealed ledger fooColor: Bytes<32>;
+export sealed ledger barColor: Bytes<32>;
+export ledger alreadyMinted: Set<ZswapCoinPublicKey>;
+export ledger liquidityProviders: Map<[ZswapCoinPublicKey, Token], Uint<128>>; // (user, token_color) -> amount
+export ledger fooPool: Field;
+export ledger barPool: Field;
+sealed ledger mintAmount: Uint<64>;
+
+witness amountsToSwap(): [Uint<128>, Uint<128>]; // [amountToBuy, amountToSell]
+
+constructor(initialNonce: Bytes<32>) {
+    fooNonce = disclose(initialNonce);
+    barNonce = persistentHash<Bytes<32>>(fooNonce);
+    admin = ownPublicKey();
+    fooColor = tokenType(pad(32, "foo_token"), kernel.self());
+    barColor = tokenType(pad(32, "bar_token"), kernel.self());
+    mintAmount = 10;
+
+    // seeding the exchange with tokens
+    const ammTokens = 1000000;
+    mintToken(
+        fooColor, 
+        ammTokens as Uint<64>, 
+        fooNonce, 
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+    );
+    fooTotalSupply = ammTokens;
+    fooPool = ammTokens;
+    mintToken(
+        barColor, 
+        ammTokens as Uint<64>, 
+        barNonce, 
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+    );
+    barTotalSupply = ammTokens;
+    barPool = ammTokens;
+}
+
+circuit safeAdd<#n>(a: Uint<n>, b: Uint<n>): Uint<n> {
+  return a + b as Uint<n>;
+}
+
+circuit sendCoin(tk: Bytes<32>, amount: Uint<64>, recipient: ZswapCoinPublicKey): CoinInfo {
+    const coinInfo = mintToken(
+        tk, 
+        amount, 
+        evolveNonce(counter, disclose(fooNonce)), 
+        left<ZswapCoinPublicKey, ContractAddress>(recipient)
+    );
+    sendImmediate(coinInfo, left<ZswapCoinPublicKey, ContractAddress>(recipient), amount);
+    return coinInfo;
+}
+
+export circuit mint(tk: Token): CoinInfo {
+    const pub_tk = disclose(tk);
+    // user can only mint Foo or Bar tokens once
+    assert(alreadyMinted.member(ownPublicKey()) == false, "user already minted tokens");
+
+    counter.increment(1);
+
+    if (pub_tk == Token.foo) {
+        const newNonce = evolveNonce(counter, fooNonce);
+        fooTotalSupply = fooTotalSupply + mintAmount as Uint<128>;
+        const coinInfo = mintToken(
+            pad(32, "foo_token"), 
+            mintAmount, 
+            newNonce, 
+            left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
+        );
+        fooNonce = newNonce;
+        alreadyMinted.insert(ownPublicKey());
+        // send the tokens to the user
+        sendCoin(fooColor, mintAmount as Uint<64>, ownPublicKey());
+        return coinInfo;
+    } else {
+        const newNonce = evolveNonce(counter, barNonce);
+        barTotalSupply = barTotalSupply + mintAmount as Uint<128>;
+        const coinInfo = mintToken(
+            pad(32, "bar_token"), 
+            mintAmount, 
+            newNonce, 
+            left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey())
+        );
+        barNonce = newNonce;
+        alreadyMinted.insert(ownPublicKey());
+        // send the tokens to the user
+        sendCoin(barColor, mintAmount as Uint<64>, ownPublicKey());
+        return coinInfo;
+    }
+}
+
+export circuit addLiquidity(coin_: CoinInfo): Uint<128> {
+    const coin = disclose(coin_);
+    assert(coin.color == fooColor || coin.color == barColor, "invalid token provided");
+    const token = coin.color == fooColor ? Token.foo : Token.bar;
+    // receives the coins
+    receive(coin);
+    // updates the pool
+    if (token == Token.foo) {
+        fooPool = safeAdd<128>((fooPool as Uint<128>), coin.value);
+    } else {
+        barPool = safeAdd<128>((barPool as Uint<128>), coin.value);
+    }
+    // records the amount of liquidity provided by the user
+    if (!liquidityProviders.member([ownPublicKey(), token])) {
+        liquidityProviders.insert(
+            [ownPublicKey(), token], 
+            coin.value
+        );
+        return coin.value;
+    } else {
+        const currentBalance = liquidityProviders.lookup([ownPublicKey(), token]);
+        const newBalance = safeAdd<128>(currentBalance, coin.value);
+        liquidityProviders.insert(
+            [ownPublicKey(), token], 
+            newBalance
+        );
+        return newBalance;
+    }
+}
+
+export circuit removeLiquidity(token_: Token, amount_: Uint<128>): [] {
+    const token = disclose(token_);
+    const amount = disclose(amount_);
+    // checks that the user has provided liquidity
+    assert(liquidityProviders.member([ownPublicKey(), token]), "this user has no liquidity");
+    // finds the user's balance
+    const color = token == Token.foo ? fooColor : barColor;
+    const currentBalance = liquidityProviders.lookup([ownPublicKey(), token]);
+    assert(currentBalance >= amount, "insufficient balance");
+
+    if (currentBalance == amount) {
+        // user is removing all of their liquidity
+        liquidityProviders.remove([ownPublicKey(), token]);
+    } else {
+        // subtracts the amount of liquidity from the user's balance
+        // and updates the liquidityProviders map
+        const newBalance = currentBalance - amount;
+        // insert the new balance
+        liquidityProviders.insert(
+            [ownPublicKey(), token], 
+            newBalance
+        );
+    }
+    // updates the relevant liquidity pool
+    if (token == Token.foo) {
+        fooPool = fooPool - amount;
+    } else {
+        barPool = barPool - amount;
+    }
+    // sends the tokens
+    sendCoin(
+        color, 
+        amount as Uint<64>, 
+        ownPublicKey()
+    );
+
+    return ;
+}
+
+circuit verifySwap(tokenTo: Token, amountToBuy: Uint<128>, amountToSell: Uint<128>): Boolean {
+    if (tokenTo == Token.bar) {
+        // $foo to $bar swap
+        return amountToSell * (barPool - amountToBuy) == fooPool * amountToBuy;
+    } else if (tokenTo == Token.foo) {
+        // $bar to $foo swap
+        return amountToSell * (fooPool - amountToBuy) == barPool * amountToBuy;
+    } else {
+        return false;
+    }
+}
+
+// https://venice.ai/chat/6e36faa8-c296-43c0-bdd1-9b159b75431f?ref=4qmOWE#veniceShareKey=PbeTPBqDu7q1rBE8EnBcQICl%2FEG9zXnfoeR225o3IbA%3D&veniceShareNonce=AQztmrv6JAWRlHKS5shaUU1AXWwBZblJ
+export circuit swapFooForBar(fromCoin_: CoinInfo): [Field, Field] {
+    /*
+        x = $foo in pool
+        y = $bar in pool
+        Δx = $foo to $bar swap
+        Δy = $bar to $foo swap
+        To buy $bar, the formula is: Δx = (x * Δy) / (y - Δy)
+        To buy $foo, the formula is: Δy = (y * Δx) / (x - Δx)
+    */
+    const fromCoin = disclose(fromCoin_);
+    assert(fromCoin.color == fooColor, "invalid token provided for swap");
+
+    const [barToBuy, fooToSell] = amountsToSwap();
+    assert(barToBuy > 0 && fooToSell > 0, "invalid amounts to swap");
+    assert(fromCoin.value != fooToSell, "value of $foo from parameter and witness do not match");
+    assert(verifySwap(Token.bar, barToBuy, fooToSell), "invalid swap amounts");
+    // receives the tokens
+    receive(fromCoin);
+    // updates the pools
+    fooPool = fooPool - disclose(fooToSell);
+    barPool = safeAdd<128>((barPool as Uint<128>), disclose(barToBuy));
+    // sends the tokens
+    sendCoin(
+        barColor, 
+        disclose(barToBuy) as Uint<64>, 
+        ownPublicKey()
+    );
+
+    return [barPool, fooPool];
+}
+
+export circuit swapBarForFoo(fromCoin_: CoinInfo): [Field, Field] {
+    /*
+        x = $foo in pool
+        y = $bar in pool
+        Δx = $foo to $bar swap
+        Δy = $bar to $foo swap
+        To buy $bar, the formula is: Δx = (x * Δy) / (y - Δy)
+        To buy $foo, the formula is: Δy = (y * Δx) / (x - Δx)
+    */
+    const fromCoin = disclose(fromCoin_);
+    assert(fromCoin.color == barColor, "invalid token provided for swap");
+    
+    const [fooToBuy, barToSell] = amountsToSwap();
+    assert(fooToBuy > 0 && barToSell > 0, "invalid amounts to swap");
+    assert(fromCoin.value != barToSell, "value of $bar from parameter and witness do not match");
+    assert(verifySwap(Token.foo, fooToBuy, barToSell), "invalid swap amounts");
+    // receives the tokens
+    receive(fromCoin);
+    // updates the pools
+    barPool = barPool - disclose(barToSell);
+    fooPool = safeAdd<128>((fooPool as Uint<128>), disclose(fooToBuy));
+    // sends the tokens
+    sendCoin(
+        fooColor, 
+        disclose(fooToBuy) as Uint<64>, 
+        ownPublicKey()
+    );
+
+    return [barPool, fooPool];
+}

@@ -1,0 +1,252 @@
+pragma language_version >= 0.14.0;
+pragma compiler_version >= 0.21.0;
+
+import CompactStandardLibrary;
+
+export enum Token { foo, bar }
+
+export ledger counter: Counter;
+export ledger fooNonce: Bytes<32>;
+export ledger barNonce: Bytes<32>;
+export ledger fooTotalSupply: Uint<128>;
+export ledger barTotalSupply: Uint<128>;
+export sealed ledger admin: ZswapCoinPublicKey;
+export sealed ledger fooColor: Bytes<32>;
+export sealed ledger barColor: Bytes<32>;
+export ledger alreadyMinted: Set<ZswapCoinPublicKey>;
+export ledger liquidityProviders: Map<[ZswapCoinPublicKey, Token], Uint<128>>; // (user, token_color) -> amount
+// export ledger liquidityProviders: Map<[ZswapCoinPublicKey, Token], QualifiedCoinInfo>; // (user, token_color) -> amount
+export ledger fooPool: Uint<128>;
+export ledger barPool: Uint<128>;
+sealed ledger mintAmount: Uint<128>;
+sealed ledger divLoop: Vector<1000, Uint<1>>;
+
+constructor(initialNonce: Bytes<32>) {
+    fooNonce = initialNonce;
+    barNonce = persistent_hash<Bytes<32>>(initialNonce);
+    admin = own_public_key();
+    fooColor = token_type(pad(32, "foo_token"), kernel.self());
+    barColor = token_type(pad(32, "bar_token"), kernel.self());
+    mintAmount = 10;
+
+    // seeding the exchange with tokens
+    const ammTokens = 100;
+    mint_token(
+        fooColor, 
+        ammTokens, 
+        fooNonce, 
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+    );
+    fooTotalSupply = ammTokens;
+    fooPool = ammTokens;
+    mint_token(
+        barColor, 
+        ammTokens, 
+        barNonce, 
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+    );
+    barTotalSupply = ammTokens;
+    barPool = ammTokens;
+}
+
+export struct DivResult {
+    quotient: Uint<128>;
+    remainder: Uint<128>;
+}
+// hacky way of making a division
+export circuit div(dividend: Uint<128>, divisor: Uint<128>): DivResult {
+    assert divisor != 0 "division by zero";
+
+    const [remainder, quotient]: [Uint<128>, Uint<128>] = fold((acc, _) => {
+        const [remaining, counter] = acc;
+        if (remaining < divisor) {
+            return acc;
+        } else {
+            return [(remaining - divisor), safeAdd<128>(counter, 1)];
+        }
+    }, [dividend, 0 as Uint<128>], divLoop);
+
+    return DivResult {
+        quotient: quotient,
+        remainder: remainder
+    };
+}
+
+circuit safeAdd<#n>(a: Uint<n>, b: Uint<n>): Uint<n> {
+  return a + b as Uint<n>;
+}
+
+export circuit mint(tk: Token): CoinInfo {
+    // user can only mint Foo or Bar tokens once
+    assert alreadyMinted.member(own_public_key()) == false "user already minted tokens";
+
+    counter.increment(1);
+
+    if (tk == Token.foo) {
+        const newNonce = evolve_nonce(counter, fooNonce);
+        fooTotalSupply = fooTotalSupply + mintAmount as Uint<128>;
+        const coinInfo = mint_token(
+            pad(32, "foo_token"), 
+            mintAmount, 
+            newNonce, 
+            left<ZswapCoinPublicKey, ContractAddress>(own_public_key())
+        );
+        fooNonce = newNonce;
+        alreadyMinted.insert(own_public_key());
+        // TODO: send the tokens to the user
+        return coinInfo;
+    } else {
+        const newNonce = evolve_nonce(counter, barNonce);
+        barTotalSupply = barTotalSupply + mintAmount as Uint<128>;
+        const coinInfo = mint_token(
+            pad(32, "bar_token"), 
+            mintAmount, 
+            newNonce, 
+            left<ZswapCoinPublicKey, ContractAddress>(own_public_key())
+        );
+        barNonce = newNonce;
+        alreadyMinted.insert(own_public_key());
+        return coinInfo;
+    }
+}
+
+circuit public_key(round: Field, sk: Bytes<32>): Bytes<32> {
+  return persistent_hash<Vector<2, Bytes<32>>>(
+      [persistent_hash<Vector<2, Bytes<32>>>(
+        [pad(32, "midnight:fungible-token"),
+        round as Bytes<32>]),
+      sk]);
+}
+
+export circuit addLiquidity(coin: CoinInfo): [] {
+    assert coin.color == fooColor || coin.color == barColor "invalid token provided";
+    const token = coin.color == fooColor ? Token.foo : Token.bar;
+    // receives the coins
+    receive(coin);
+    // records the amount of liquidity provided by the user
+    if (!liquidityProviders.member([own_public_key(), token])) {
+        liquidityProviders.insert(
+            [own_public_key(), token], 
+            coin.value
+        );
+    } else {
+        const currentBalance = liquidityProviders.lookup([own_public_key(), token]);
+        liquidityProviders.insert(
+            [own_public_key(), token], 
+            safeAdd<128>(currentBalance, coin.value)
+        );
+    }
+    // updates the pool
+    if (token == Token.foo) {
+        fooPool = safeAdd<128>(fooPool, coin.value);
+    } else {
+        barPool = safeAdd<128>(barPool, coin.value);
+    }
+
+    return ;
+}
+
+export circuit removeLiquidity(token: Token, amount: Uint<128>): [] {
+    // checks that the user has provided liquidity
+    assert liquidityProviders.member([own_public_key(), token]) "this user has no liquidity";
+    // finds the user's balance
+    const color = token == Token.foo ? fooColor : barColor;
+    const currentBalance = liquidityProviders.lookup([own_public_key(), token]);
+    assert currentBalance >= amount "insufficient balance";
+
+    if (currentBalance == amount) {
+        // user is removing all of their liquidity
+        liquidityProviders.remove([own_public_key(), token]);
+    } else {
+        // subtracts the amount of liquidity from the user's balance
+        const newBalance = currentBalance - amount;
+        // insert the new balance
+        liquidityProviders.insert(
+            [own_public_key(), token], 
+            newBalance
+        );
+    }
+    // updates the relevant liquidity pool
+    if (token == Token.foo) {
+        fooPool = fooPool - amount;
+    } else {
+        barPool = barPool - amount;
+    }
+    // sends the tokens
+    const coinToSend: CoinInfo = mint_token(
+        color, 
+        amount, 
+        evolve_nonce(counter, token == Token.foo ? fooNonce : barNonce), 
+        left<ZswapCoinPublicKey, ContractAddress>(own_public_key())
+    );
+    send_immediate(
+        coinToSend, 
+        left<ZswapCoinPublicKey, ContractAddress>(own_public_key()), 
+        amount
+    );
+
+    return ;
+}
+
+export circuit swap(fromCoin: CoinInfo, tokenToBuy: Token, amountToBuy: Uint<128>): [Uint<128>, Uint<128>] {
+    /*
+        x = $foo in pool
+        y = $bar in pool
+        Δx = $foo to $bar swap
+        Δy = $bar to $foo swap
+        To buy $bar, the formula is: Δx = (x * Δy) / (y - Δy)
+        To buy $foo, the formula is: Δy = (y * Δx) / (x - Δx)
+    */
+    // receives the tokens
+    receive(fromCoin);
+    // calculates the amount of tokens to send
+    if (tokenToBuy == Token.foo) {
+        assert fromCoin.color == barColor "invalid token provided to buy $foo";
+        assert amountToBuy <= fooPool "insufficient funds in $foo pool";
+        const { quotient: barAmount, remainder } = div(
+            (barPool * amountToBuy) as Uint<128>, // BUG: conversion may cause overflow
+            fooPool - amountToBuy
+        );
+        // updates the pools
+        fooPool = fooPool - amountToBuy;
+        barPool = safeAdd<128>(barPool, barAmount);
+        // sends the tokens
+        const coinToSend: CoinInfo = mint_token(
+            fooColor, 
+            amountToBuy, 
+            evolve_nonce(counter, fooNonce), 
+            left<ZswapCoinPublicKey, ContractAddress>(own_public_key())
+        );
+        send_immediate(
+            coinToSend, 
+            left<ZswapCoinPublicKey, ContractAddress>(own_public_key()), 
+            amountToBuy
+        );
+
+        return [barAmount, remainder];
+    } else {
+        assert fromCoin.color == fooColor "invalid token provided to buy $bar";
+        assert amountToBuy <= barPool "insufficient funds in $bar pool";
+        const { quotient: fooAmount, remainder } = div(
+            (fooPool * amountToBuy) as Uint<128>, // BUG: conversion may cause overflow
+            barPool - amountToBuy
+        );
+        // updates the pools
+        barPool = barPool - amountToBuy;
+        fooPool = safeAdd<128>(fooPool, fooAmount);
+        // sends the tokens
+        const coinToSend: CoinInfo = mint_token(
+            barColor, 
+            amountToBuy, 
+            evolve_nonce(counter, barNonce), 
+            left<ZswapCoinPublicKey, ContractAddress>(own_public_key())
+        );
+        send_immediate(
+            coinToSend, 
+            left<ZswapCoinPublicKey, ContractAddress>(own_public_key()), 
+            amountToBuy
+        );
+
+        return [fooAmount, remainder];
+    }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "example-dex",
+  "version": "1.0.0",
+  "description": "A simple AMM DEX template working on Midnight",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "compactc contract/contract.compact contract/managed",
+    "verify-contract": "compactc --skip-zk contract/contract.compact contract/no-zk",
+    "watch-compile": "nodemon --exec \"npm run verify-contract\" --ext compact"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/midnightntwrk/example-dex.git"
+  },
+  "keywords": [
+    "midnight",
+    "compact",
+    "dex"
+  ],
+  "author": "Claude Barde",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/midnightntwrk/example-dex/issues"
+  },
+  "homepage": "https://github.com/midnightntwrk/example-dex#readme",
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
