@@ -1,6 +1,8 @@
 # Example DEX repo
 
-This GitHub repository is actively under construction. It will provide a template to build a DEX (decentralized exchange) based on a simple automatic market maker. The template is meant to be an example for developers to understand how Compact and MidnightJS work and is not intended for production.
+🚧 🚧 🚧  
+This GitHub repository is actively under construction. It will provide a template to build a DEX (decentralized exchange) based on a simple automatic market maker. The template is meant to be an example for developers to understand how Compact and MidnightJS work and is not intended for production.  
+🚧 🚧 🚧
 
 ### LICENSE
 
