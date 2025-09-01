@@ -3,15 +3,59 @@ import type * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
 export enum Token { foo = 0, bar = 1 }
 
 export type Witnesses<T> = {
+  amountsToSwap(context: __compactRuntime.WitnessContext<Ledger, T>): [T, [bigint,
+                                                                           bigint]];
 }
 
 export type ImpureCircuits<T> = {
+  claim(context: __compactRuntime.CircuitContext<T>, token_0: Token): __compactRuntime.CircuitResults<T, []>;
+  addLiquidity(context: __compactRuntime.CircuitContext<T>,
+               token_0: Token,
+               amount_0: bigint): __compactRuntime.CircuitResults<T, []>;
+  removeLiquidity(context: __compactRuntime.CircuitContext<T>,
+                  token_0: Token,
+                  amount_0: bigint): __compactRuntime.CircuitResults<T, []>;
+  transferFoo(context: __compactRuntime.CircuitContext<T>,
+              to_0: { is_left: boolean,
+                      left: { bytes: Uint8Array },
+                      right: { bytes: Uint8Array }
+                    },
+              value_0: bigint): __compactRuntime.CircuitResults<T, boolean>;
+  transferBar(context: __compactRuntime.CircuitContext<T>,
+              to_0: { is_left: boolean,
+                      left: { bytes: Uint8Array },
+                      right: { bytes: Uint8Array }
+                    },
+              value_0: bigint): __compactRuntime.CircuitResults<T, boolean>;
+  swap(context: __compactRuntime.CircuitContext<T>, from_0: Token): __compactRuntime.CircuitResults<T, [bigint,
+                                                                                                        bigint]>;
 }
 
 export type PureCircuits = {
 }
 
 export type Circuits<T> = {
+  claim(context: __compactRuntime.CircuitContext<T>, token_0: Token): __compactRuntime.CircuitResults<T, []>;
+  addLiquidity(context: __compactRuntime.CircuitContext<T>,
+               token_0: Token,
+               amount_0: bigint): __compactRuntime.CircuitResults<T, []>;
+  removeLiquidity(context: __compactRuntime.CircuitContext<T>,
+                  token_0: Token,
+                  amount_0: bigint): __compactRuntime.CircuitResults<T, []>;
+  transferFoo(context: __compactRuntime.CircuitContext<T>,
+              to_0: { is_left: boolean,
+                      left: { bytes: Uint8Array },
+                      right: { bytes: Uint8Array }
+                    },
+              value_0: bigint): __compactRuntime.CircuitResults<T, boolean>;
+  transferBar(context: __compactRuntime.CircuitContext<T>,
+              to_0: { is_left: boolean,
+                      left: { bytes: Uint8Array },
+                      right: { bytes: Uint8Array }
+                    },
+              value_0: bigint): __compactRuntime.CircuitResults<T, boolean>;
+  swap(context: __compactRuntime.CircuitContext<T>, from_0: Token): __compactRuntime.CircuitResults<T, [bigint,
+                                                                                                        bigint]>;
 }
 
 export type Ledger = {

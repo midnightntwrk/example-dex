@@ -1,0 +1,227 @@
+pragma language_version >= 0.16 && <= 0.17;
+
+import CompactStandardLibrary;
+import "./lib/FungibleToken" prefix FooToken_;
+import "./lib/FungibleToken" prefix BarToken_;
+
+export enum Token { foo, bar }
+
+export sealed ledger admin: ZswapCoinPublicKey;
+export ledger alreadyMinted: Set<ZswapCoinPublicKey>;
+export ledger liquidityProviders: Map<[ZswapCoinPublicKey, Token], Uint<128>>; // (user, token_color) -> amount
+sealed ledger claimAmount: Uint<128>;
+
+witness amountsToSwap(): [Uint<128>, Uint<128>]; // [amountToBuy, amountToSell]
+
+circuit safeAdd<#n>(a: Uint<n>, b: Uint<n>): Uint<n> {
+  return a + b as Uint<n>;
+}
+
+export circuit padTokenAmount(amount: Uint<128>): Uint<128> {
+    // Pads the token amount to 18 decimal places
+    return amount * 100000000000000000000 as Uint<128>;
+}
+
+constructor(
+    names: [Opaque<"string">, Opaque<"string">],
+    symbols: [Opaque<"string">, Opaque<"string">],
+    fixedSupply: Uint<128>
+) {
+    FooToken_initialize(names[0], symbols[0], 18);
+    BarToken_initialize(names[1], symbols[1], 18);
+    admin = ownPublicKey();
+    // the total supply is owned by the contract
+    FooToken__mint(
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+        fixedSupply
+    );
+    BarToken__mint(
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+        fixedSupply
+    );
+    claimAmount = padTokenAmount(100);
+}
+
+// users can claim 100 tokens of one type
+export circuit claim(
+    token: Token
+): [] {
+    const $token = disclose(token);
+    const user = ownPublicKey();
+    assert(!alreadyMinted.member(user), "User has already claimed tokens");
+    if ($token == Token.foo) {
+        const userBalance = FooToken_balanceOf(left<ZswapCoinPublicKey, ContractAddress>(user));
+        const success = FooToken_transferFrom(
+            right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+            left<ZswapCoinPublicKey, ContractAddress>(user),
+            claimAmount
+        );
+        assert(success, "Failed to transfer Foo tokens");
+    } else {
+        const userBalance = BarToken_balanceOf(left<ZswapCoinPublicKey, ContractAddress>(user));
+        const success = BarToken_transferFrom(
+            right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+            left<ZswapCoinPublicKey, ContractAddress>(user),
+            claimAmount
+        );
+        assert(success, "Failed to transfer Bar tokens");
+    }
+    alreadyMinted.insert(user);
+}
+
+export circuit addLiquidity(
+    token: Token,
+    amount: Uint<128>,
+): [] {
+    const contractAddress = kernel.self();
+    const $token = disclose(token);
+    const $amount = disclose(amount);
+    // checks if the user has enough tokens
+    const user = ownPublicKey();
+    if ($token == Token.foo) {
+        // transfers the amount of Foo tokens to the contract
+        const userBalance = FooToken_balanceOf(left<ZswapCoinPublicKey, ContractAddress>(user));
+        assert(userBalance >= amount, "Not enough Foo tokens");
+        const success = FooToken_transfer(
+            right<ZswapCoinPublicKey, ContractAddress>(contractAddress),
+            amount
+        );
+        assert(success, "Failed to transfer Foo tokens");
+        // checks if the user is already a liquidity provider
+        // and updates the liquidity providers map
+        const liquidityKey = [user, Token.foo];
+        if (liquidityProviders.member(liquidityKey)) {
+            const currentLiquidity = liquidityProviders.lookup(liquidityKey);
+            liquidityProviders.insert(liquidityKey, safeAdd<128>(currentLiquidity, $amount));
+        } else {
+            liquidityProviders.insert(liquidityKey, $amount);
+        }
+    } else {
+        // transfers the amount of Bar tokens to the contract
+        const userBalance = BarToken_balanceOf(left<ZswapCoinPublicKey, ContractAddress>(user));
+        assert(userBalance >= amount, "Not enough Bar tokens");
+        const success = BarToken_transfer(
+            right<ZswapCoinPublicKey, ContractAddress>(contractAddress),
+            amount
+        );
+        assert(success, "Failed to transfer Bar tokens");
+        // checks if the user is already a liquidity provider
+        // and updates the liquidity providers map
+        const liquidityKey = [user, Token.bar];
+        if (liquidityProviders.member(liquidityKey)) {
+            const currentLiquidity = liquidityProviders.lookup(liquidityKey);
+            liquidityProviders.insert(liquidityKey, safeAdd<128>(currentLiquidity, $amount));
+        } else {
+            liquidityProviders.insert(liquidityKey, $amount);
+        }
+    }
+}
+
+export circuit removeLiquidity(
+    token: Token,
+    amount: Uint<128>,
+): [] {
+    const $token = disclose(token);
+    const $amount = disclose(amount);
+    // checks if the user has provided liquidity
+    const user = ownPublicKey();
+    const liquidityKey = [user, $token];
+    assert(liquidityProviders.member(liquidityKey), "User has no liquidity");
+    const currentLiquidity = liquidityProviders.lookup(liquidityKey);
+    assert(currentLiquidity >= $amount, "Insufficient liquidity");
+
+    // updates the user's liquidity balance
+    if (currentLiquidity == $amount) {
+        liquidityProviders.remove(liquidityKey);
+    } else {
+        liquidityProviders.insert(liquidityKey, currentLiquidity - $amount);
+    }
+
+    // transfers the tokens back to the user
+    if ($token == Token.foo) {
+        FooToken_transfer(left<ZswapCoinPublicKey, ContractAddress>(user), $amount as Uint<128>);
+    } else {
+        BarToken_transfer(left<ZswapCoinPublicKey, ContractAddress>(user), $amount as Uint<128>);
+    }
+}
+
+export circuit transferFoo(
+    to: Either<ZswapCoinPublicKey, ContractAddress>, 
+    value: Uint<128>): Boolean {
+  return FooToken_transfer(to, value);
+}
+
+export circuit transferBar(
+    to: Either<ZswapCoinPublicKey, ContractAddress>, 
+    value: Uint<128>): Boolean {
+  return BarToken_transfer(to, value);
+}
+
+circuit verifySwap(tokenTo: Token, amountToBuy: Field, amountToSell: Field): Boolean {
+    const contractAddress = kernel.self();
+    const fooPool = FooToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress)) as Field;
+    const barPool = BarToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress)) as Field;
+
+    if (tokenTo == Token.bar) {
+        // $foo to $bar swap
+        return amountToSell * (barPool - amountToBuy) == fooPool * amountToBuy;
+    } else if (tokenTo == Token.foo) {
+        // $bar to $foo swap
+        return amountToSell * (fooPool - amountToBuy) == barPool * amountToBuy;
+    } else {
+        return false;
+    }
+}
+
+export circuit swap(from: Token): [Field, Field] {
+    /*
+        x = $foo in pool
+        y = $bar in pool
+        Δx = $foo to $bar swap
+        Δy = $bar to $foo swap
+        To buy $bar, the formula is: Δx = (x * Δy) / (y - Δy)
+        To buy $foo, the formula is: Δy = (y * Δx) / (x - Δx)
+    */
+    const [amountToBuy, amountToSell] = amountsToSwap();
+    const $from = disclose(from);
+    // verifies the swap amounts
+    assert(amountToBuy > 0 && amountToSell > 0, "invalid amounts to swap");
+    assert(verifySwap(from, amountToBuy, amountToSell), "invalid swap amounts");
+    const contractAddress = kernel.self();
+    const fooPool = FooToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress));
+    const barPool = BarToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress));
+    if ($from == Token.foo) {
+        // $foo to $bar swap
+        // asserts that the bar pool has enough tokens
+        assert(barPool >= amountToBuy, "Not enough Bar tokens in the pool");
+        // updates the sender's balances
+        FooToken_transferFrom(
+            right<ZswapCoinPublicKey, ContractAddress>(contractAddress),
+            left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey()),
+            amountToSell
+        );
+        BarToken_transfer(
+            right<ZswapCoinPublicKey, ContractAddress>(contractAddress),
+            amountToBuy as Uint<128>
+        );
+    } else {
+        // $bar to $foo swap
+        // asserts that the foo pool has enough tokens
+        assert(fooPool >= amountToBuy, "Not enough Foo tokens in the pool");
+        // updates the sender's balances
+        BarToken_transferFrom(
+            right<ZswapCoinPublicKey, ContractAddress>(contractAddress),
+            left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey()),
+            amountToSell
+        );
+        FooToken_transfer(
+            right<ZswapCoinPublicKey, ContractAddress>(contractAddress),
+            amountToBuy as Uint<128>
+        );
+    }
+
+    // returns the updated pools
+    const newFooPool = FooToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress));
+    const newBarPool = BarToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress));
+    return [newFooPool, newBarPool];
+}

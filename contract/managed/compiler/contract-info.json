@@ -1,11 +1,11 @@
 {
   "circuits": [
     {
-      "name": "mint",
+      "name": "claim",
       "pure": false,
       "arguments": [
         {
-          "name": "tk",
+          "name": "token",
           "type": {
             "type-name": "Enum",
             "name": "Token",
@@ -17,30 +17,8 @@
         }
       ],
       "result-type": {
-        "type-name": "Struct",
-        "name": "CoinInfo",
-        "elements": [
-          {
-            "name": "nonce",
-            "type": {
-              "type-name": "Bytes",
-              "length": 32
-            }
-          },
-          {
-            "name": "color",
-            "type": {
-              "type-name": "Bytes",
-              "length": 32
-            }
-          },
-          {
-            "name": "value",
-            "type": {
-              "type-name": "Uint",
-              "maxval": 340282366920938463463374607431768211455
-            }
-          }
+        "type-name": "Tuple",
+        "types": [
         ]
       }
     },
@@ -49,47 +27,7 @@
       "pure": false,
       "arguments": [
         {
-          "name": "coin_",
-          "type": {
-            "type-name": "Struct",
-            "name": "CoinInfo",
-            "elements": [
-              {
-                "name": "nonce",
-                "type": {
-                  "type-name": "Bytes",
-                  "length": 32
-                }
-              },
-              {
-                "name": "color",
-                "type": {
-                  "type-name": "Bytes",
-                  "length": 32
-                }
-              },
-              {
-                "name": "value",
-                "type": {
-                  "type-name": "Uint",
-                  "maxval": 340282366920938463463374607431768211455
-                }
-              }
-            ]
-          }
-        }
-      ],
-      "result-type": {
-        "type-name": "Uint",
-        "maxval": 340282366920938463463374607431768211455
-      }
-    },
-    {
-      "name": "removeLiquidity",
-      "pure": false,
-      "arguments": [
-        {
-          "name": "token_",
+          "name": "token",
           "type": {
             "type-name": "Enum",
             "name": "Token",
@@ -100,7 +38,7 @@
           }
         },
         {
-          "name": "amount_",
+          "name": "amount",
           "type": {
             "type-name": "Uint",
             "maxval": 340282366920938463463374607431768211455
@@ -114,83 +52,172 @@
       }
     },
     {
-      "name": "swapFooForBar",
+      "name": "removeLiquidity",
       "pure": false,
       "arguments": [
         {
-          "name": "fromCoin_",
+          "name": "token",
           "type": {
-            "type-name": "Struct",
-            "name": "CoinInfo",
+            "type-name": "Enum",
+            "name": "Token",
             "elements": [
-              {
-                "name": "nonce",
-                "type": {
-                  "type-name": "Bytes",
-                  "length": 32
-                }
-              },
-              {
-                "name": "color",
-                "type": {
-                  "type-name": "Bytes",
-                  "length": 32
-                }
-              },
-              {
-                "name": "value",
-                "type": {
-                  "type-name": "Uint",
-                  "maxval": 340282366920938463463374607431768211455
-                }
-              }
+              "foo",
+              "bar"
             ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
           }
         }
       ],
       "result-type": {
         "type-name": "Tuple",
         "types": [
-          {
-            "type-name": "Field"
-          },
-          {
-            "type-name": "Field"
-          }
         ]
       }
     },
     {
-      "name": "swapBarForFoo",
+      "name": "transferFoo",
       "pure": false,
       "arguments": [
         {
-          "name": "fromCoin_",
+          "name": "to",
           "type": {
             "type-name": "Struct",
-            "name": "CoinInfo",
+            "name": "Either",
             "elements": [
               {
-                "name": "nonce",
+                "name": "is_left",
                 "type": {
-                  "type-name": "Bytes",
-                  "length": 32
+                  "type-name": "Boolean"
                 }
               },
               {
-                "name": "color",
+                "name": "left",
                 "type": {
-                  "type-name": "Bytes",
-                  "length": 32
+                  "type-name": "Struct",
+                  "name": "ZswapCoinPublicKey",
+                  "elements": [
+                    {
+                      "name": "bytes",
+                      "type": {
+                        "type-name": "Bytes",
+                        "length": 32
+                      }
+                    }
+                  ]
                 }
               },
               {
-                "name": "value",
+                "name": "right",
                 "type": {
-                  "type-name": "Uint",
-                  "maxval": 340282366920938463463374607431768211455
+                  "type-name": "Struct",
+                  "name": "ContractAddress",
+                  "elements": [
+                    {
+                      "name": "bytes",
+                      "type": {
+                        "type-name": "Bytes",
+                        "length": 32
+                      }
+                    }
+                  ]
                 }
               }
+            ]
+          }
+        },
+        {
+          "name": "value",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Boolean"
+      }
+    },
+    {
+      "name": "transferBar",
+      "pure": false,
+      "arguments": [
+        {
+          "name": "to",
+          "type": {
+            "type-name": "Struct",
+            "name": "Either",
+            "elements": [
+              {
+                "name": "is_left",
+                "type": {
+                  "type-name": "Boolean"
+                }
+              },
+              {
+                "name": "left",
+                "type": {
+                  "type-name": "Struct",
+                  "name": "ZswapCoinPublicKey",
+                  "elements": [
+                    {
+                      "name": "bytes",
+                      "type": {
+                        "type-name": "Bytes",
+                        "length": 32
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "right",
+                "type": {
+                  "type-name": "Struct",
+                  "name": "ContractAddress",
+                  "elements": [
+                    {
+                      "name": "bytes",
+                      "type": {
+                        "type-name": "Bytes",
+                        "length": 32
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "value",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Boolean"
+      }
+    },
+    {
+      "name": "swap",
+      "pure": false,
+      "arguments": [
+        {
+          "name": "from",
+          "type": {
+            "type-name": "Enum",
+            "name": "Token",
+            "elements": [
+              "foo",
+              "bar"
             ]
           }
         }
@@ -207,5 +234,27 @@
         ]
       }
     }
+  ],
+  "witnesses": [
+    {
+      "name": "amountsToSwap",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Tuple",
+        "types": [
+          {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          },
+          {
+            "type-name": "Uint",
+            "maxval": 340282366920938463463374607431768211455
+          }
+        ]
+      }
+    }
+  ],
+  "contracts": [
   ]
 }
