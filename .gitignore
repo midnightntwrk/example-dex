@@ -89,3 +89,6 @@ ehthumbs.db
 Desktop.ini
 
 tests/contract/
+contract/managed/
+contract/no-zk/
+drafts/
