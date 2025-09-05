@@ -10,11 +10,6 @@ import {
   type ContractAddress,
   left
 } from "../api";
-import {
-  encodeCoinPublicKey,
-  encodeContractAddress,
-  decodeCoinPublicKey
-} from "@midnight-ntwrk/compact-runtime";
 
 beforeAll(() => {
   // Verify FungibleToken.compact file integrity
@@ -79,6 +74,7 @@ describe("Contract Runtime Tests", () => {
 describe("Contract must be constructed correctly", () => {
   const fixedSupply = 20_000_000n;
   const contract = new ContractSimulator(fixedSupply);
+  const contractAddress = new Uint8Array(32);
 
   it("must verify that the contract is set with the right ledger values", () => {
     const ledger = contract.getLedger();
@@ -101,16 +97,15 @@ describe("Contract must be constructed correctly", () => {
   });
 
   it("must verify the contract holds the right balances", () => {
-    console.log("contract-test:", contract.address);
     const contractFooBalance = contract.balanceOf(
       right<ZswapCoinPublicKey, ContractAddress>(
         {
-          bytes: encodeContractAddress(contract.address)
+          bytes: contractAddress
         },
         { bytes: new Uint8Array(32) }
       ),
       contractRunTime.Token.foo
     );
-    expect(contractFooBalance).toEqual(fixedSupply);
+    expect(ContractSimulator.unpad(contractFooBalance)).toEqual(fixedSupply);
   });
 });
