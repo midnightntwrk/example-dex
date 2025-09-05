@@ -6,7 +6,7 @@ pragma language_version >= 0.16.0;
  * @module Initializable
  * @description Initializable provides a simple mechanism that mimics the functionality of a constructor.
  */
-module Initializable {
+module FooInitializable {
   import CompactStandardLibrary;
 
   export ledger _isInitialized: Boolean;

@@ -38,10 +38,10 @@ pragma language_version >= 0.16.0;
  * - Events.
  * - Contract-to-contract calls.
  */
-module FungibleToken {
+module FooToken {
   import CompactStandardLibrary;
-  import Initializable prefix Initializable_;
-  import Utils prefix Utils_;
+  import FooInitializable prefix Initializable_;
+  import FooUtils prefix Utils_;
 
   /**
    * @description Mapping from account addresses to their token balances.
@@ -199,7 +199,7 @@ module FungibleToken {
    */
   export circuit transfer(to: Either<ZswapCoinPublicKey, ContractAddress>, value: Uint<128>): Boolean {
     Initializable_assertInitialized();
-    assert(!Utils_isContractAddress(to), "FungibleToken: Unsafe Transfer");
+    assert(!Utils_isContractAddress(to), "FooToken: Unsafe Transfer");
     return _unsafeTransfer(to, value);
   }
 
@@ -309,7 +309,7 @@ module FungibleToken {
     value: Uint<128>
   ): Boolean {
     Initializable_assertInitialized();
-    assert(!Utils_isContractAddress(to), "FungibleToken: Unsafe Transfer");
+    assert(!Utils_isContractAddress(to), "FooToken: Unsafe Transfer");
     return _unsafeTransferFrom(from, to, value);
   }
 
@@ -378,7 +378,7 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert(!Utils_isContractAddress(to), "FungibleToken: Unsafe Transfer");
+    assert(!Utils_isContractAddress(to), "FooToken: Unsafe Transfer");
     _unsafeUncheckedTransfer(from, to, value);
   }
 
@@ -408,8 +408,8 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert(!Utils_isKeyOrAddressZero(from), "FungibleToken: invalid sender");
-    assert(!Utils_isKeyOrAddressZero(to), "FungibleToken: invalid receiver");
+    assert(!Utils_isKeyOrAddressZero(from), "FooToken: invalid sender");
+    assert(!Utils_isKeyOrAddressZero(to), "FooToken: invalid receiver");
 
     _update(from, to, value);
   }
@@ -439,12 +439,12 @@ module FungibleToken {
     if (Utils_isKeyOrAddressZero(disclose(from))) {
       // Mint
       const MAX_UINT128 = 340282366920938463463374607431768211455;
-      assert(MAX_UINT128 - _totalSupply >= value, "FungibleToken: arithmetic overflow");
+      assert(MAX_UINT128 - _totalSupply >= value, "FooToken: arithmetic overflow");
 
       _totalSupply = disclose(_totalSupply + value as Uint<128>);
     } else {
       const fromBal = balanceOf(from);
-      assert(fromBal >= value, "FungibleToken: insufficient balance");
+      assert(fromBal >= value, "FooToken: insufficient balance");
       _balances.insert(disclose(from), disclose(fromBal - value as Uint<128>));
     }
 
@@ -482,7 +482,7 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert(!Utils_isContractAddress(account), "FungibleToken: Unsafe Transfer");
+    assert(!Utils_isContractAddress(account), "FooToken: Unsafe Transfer");
     _unsafeMint(account, value);
   }
 
@@ -509,7 +509,7 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert(!Utils_isKeyOrAddressZero(account), "FungibleToken: invalid receiver");
+    assert(!Utils_isKeyOrAddressZero(account), "FooToken: invalid receiver");
     _update(burnAddress(), account, value);
   }
 
@@ -534,7 +534,7 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert(!Utils_isKeyOrAddressZero(account), "FungibleToken: invalid sender");
+    assert(!Utils_isKeyOrAddressZero(account), "FooToken: invalid sender");
     _update(account, burnAddress(), value);
   }
 
@@ -563,8 +563,8 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert(!Utils_isKeyOrAddressZero(owner), "FungibleToken: invalid owner");
-    assert(!Utils_isKeyOrAddressZero(spender), "FungibleToken: invalid spender");
+    assert(!Utils_isKeyOrAddressZero(owner), "FooToken: invalid owner");
+    assert(!Utils_isKeyOrAddressZero(spender), "FooToken: invalid spender");
     if (!_allowances.member(disclose(owner))) {
       // If owner doesn't exist, create and insert a new sub-map directly
       _allowances.insert(disclose(owner), default<Map<Either<ZswapCoinPublicKey, ContractAddress>, Uint<128>>>);
@@ -594,12 +594,12 @@ module FungibleToken {
     value: Uint<128>
   ): [] {
     Initializable_assertInitialized();
-    assert((_allowances.member(disclose(owner)) && _allowances.lookup(owner).member(disclose(spender))), "FungibleToken: insufficient allowance");
+    assert((_allowances.member(disclose(owner)) && _allowances.lookup(owner).member(disclose(spender))), "FooToken: insufficient allowance");
 
     const currentAllowance = _allowances.lookup(owner).lookup(disclose(spender));
     const MAX_UINT128 = 340282366920938463463374607431768211455;
     if (currentAllowance < MAX_UINT128) {
-      assert(currentAllowance >= value, "FungibleToken: insufficient allowance");
+      assert(currentAllowance >= value, "FooToken: insufficient allowance");
       _approve(owner, spender, currentAllowance - value as Uint<128>);
     }
   }

@@ -5,7 +5,7 @@
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "test": "rm -rf tests/contract && compact compile --skip-zk contract/src/contract.compact tests/contract && vitest",
+    "test": "rm -rf contract/managed && compact compile --skip-zk contract/src/contract.compact contract/managed && vitest",
     "compile-contract": "compact compile contract/src/contract.compact contract/managed",
     "verify-contract": "compact compile --skip-zk contract/src/contract.compact contract/no-zk",
     "watch-compile": "nodemon --exec \"npm run verify-contract\" --ext compact",

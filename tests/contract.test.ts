@@ -2,53 +2,67 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "fs";
 import { createHash } from "crypto";
 import { join } from "path";
-import contractRunTime from "./contract/contract/index.cjs";
-import { constructorContext } from "@midnight-ntwrk/compact-runtime";
-import { sampleCoinPublicKey } from "@midnight-ntwrk/zswap";
-import { type ContractPrivateState, witnesses } from "../contract/src";
-
-// Expected hash of the FungibleToken.compact file
-const EXPECTED_FUNGIBLE_TOKEN_HASH =
-  "31bdc8bf48de6d6deecea6e57361fbca23999dca9e81486c66ff415931ef337b";
+import contractRunTime from "../contract/managed/contract/index.cjs";
+import {
+  ContractSimulator,
+  right,
+  type ZswapCoinPublicKey,
+  type ContractAddress,
+  left
+} from "../api";
+import {
+  encodeCoinPublicKey,
+  encodeContractAddress,
+  decodeCoinPublicKey
+} from "@midnight-ntwrk/compact-runtime";
 
 beforeAll(() => {
   // Verify FungibleToken.compact file integrity
   const verifyFungibleTokenContract = () => {
-    try {
-      // Read the FungibleToken.compact file
-      const contractPath = join(
-        process.cwd(),
-        "contract",
-        "src",
-        "lib",
-        "FungibleToken.compact"
-      );
-      const fileContent = readFileSync(contractPath, "utf8");
-
-      // Strip all whitespaces (spaces, tabs, newlines, etc.)
-      const strippedContent = fileContent.replace(/\s/g, "");
-
-      // Create SHA256 hash
-      const hash = createHash("sha256").update(strippedContent).digest("hex");
-
-      // Compare with expected hash
-      if (hash !== EXPECTED_FUNGIBLE_TOKEN_HASH) {
-        throw new Error(
-          `FungibleToken.compact hash mismatch!\n` +
-            `Expected: ${EXPECTED_FUNGIBLE_TOKEN_HASH}\n` +
-            `Got: ${hash}\n` +
-            `The contract file may have been modified or corrupted.`
-        );
+    const files = [
+      {
+        fileName: "FooToken.compact",
+        contractPath: [process.cwd(), "contract", "src", "lib", "foo"],
+        expectedHash:
+          "99ecf255460a5bfeff2f9b16bc424abcbf133d0d0173008d416830e117efca3d"
+      },
+      {
+        fileName: "BarToken.compact",
+        contractPath: [process.cwd(), "contract", "src", "lib", "bar"],
+        expectedHash:
+          "165fc5e071008587d6791b41d1889996d5a985f5de8ff5e4898499df9e6ce9d6"
       }
+    ];
+    files.forEach(({ fileName, contractPath, expectedHash }) => {
+      try {
+        // Read the FungibleToken.compact file
+        const fileContent = readFileSync(
+          join(...contractPath, fileName),
+          "utf8"
+        );
 
-      console.log("✅ FungibleToken.compact hash verification passed");
-    } catch (error) {
-      console.error(
-        "❌ FungibleToken.compact hash verification failed:",
-        error
-      );
-      throw error;
-    }
+        // Strip all whitespaces (spaces, tabs, newlines, etc.)
+        const strippedContent = fileContent.replace(/\s/g, "");
+
+        // Create SHA256 hash
+        const hash = createHash("sha256").update(strippedContent).digest("hex");
+
+        // Compare with expected hash
+        if (hash !== expectedHash) {
+          throw new Error(
+            `${fileName} hash mismatch!\n` +
+              `Expected: ${expectedHash}\n` +
+              `Got: ${hash}\n` +
+              `The contract file may have been modified or corrupted.`
+          );
+        }
+
+        console.log("✅ " + fileName + " hash verification passed");
+      } catch (error) {
+        console.error("❌ " + fileName + " hash verification failed:", error);
+        throw error;
+      }
+    });
   };
 
   verifyFungibleTokenContract();
@@ -63,29 +77,40 @@ describe("Contract Runtime Tests", () => {
 });
 
 describe("Contract must be constructed correctly", () => {
+  const fixedSupply = 20_000_000n;
+  const contract = new ContractSimulator(fixedSupply);
+
   it("must verify that the contract is set with the right ledger values", () => {
-    const initialPrivateState = { amountToBuy: 69n, amountToSell: 420n };
-    const contract = new contractRunTime.Contract<ContractPrivateState>(
-      witnesses
+    const ledger = contract.getLedger();
+    expect(ledger).toHaveProperty("admin");
+    expect(ledger.admin).toHaveProperty("bytes");
+    expect(ledger).toHaveProperty("claimAmount");
+    expect(ledger.claimAmount).toEqual(ContractSimulator.pad(100n));
+  });
+
+  it("must verify the admin holds the right balance", () => {
+    const ledger = contract.getLedger();
+    const admin = ledger.admin;
+    const adminFooBalance = contract.balanceOf(
+      left<ZswapCoinPublicKey, ContractAddress>(admin, {
+        bytes: new Uint8Array(32)
+      }),
+      contractRunTime.Token.foo
     );
-    const context = constructorContext(
-      initialPrivateState,
-      sampleCoinPublicKey()
+    expect(ContractSimulator.unpad(adminFooBalance)).toEqual(1_000_000n);
+  });
+
+  it("must verify the contract holds the right balances", () => {
+    console.log("contract-test:", contract.address);
+    const contractFooBalance = contract.balanceOf(
+      right<ZswapCoinPublicKey, ContractAddress>(
+        {
+          bytes: encodeContractAddress(contract.address)
+        },
+        { bytes: new Uint8Array(32) }
+      ),
+      contractRunTime.Token.foo
     );
-    const {
-      currentPrivateState,
-      currentContractState,
-      currentZswapLocalState
-    } = contract.initialState(
-      context,
-      ["foo", "bar"],
-      ["$FOO", "$BAR"],
-      contractRunTime.pureCircuits.padTokenAmount(21_000_000n)
-    );
-    console.log(
-      currentContractState,
-      currentZswapLocalState,
-      currentPrivateState
-    );
+    expect(contractFooBalance).toEqual(fixedSupply);
   });
 });

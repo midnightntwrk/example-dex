@@ -6,7 +6,7 @@ pragma language_version >= 0.16.0;
  * @module Utils.
  * @description A library for common utilities used in Compact contracts.
  */
-module Utils {
+module BarUtils {
   import CompactStandardLibrary;
 
   /**

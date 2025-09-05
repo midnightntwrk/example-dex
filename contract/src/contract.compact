@@ -1,15 +1,15 @@
 pragma language_version >= 0.16 && <= 0.17;
 
 import CompactStandardLibrary;
-import "./lib/FungibleToken" prefix FooToken_;
-import "./lib/FungibleToken" prefix BarToken_;
+import "./lib/foo/FooToken" prefix FooToken_;
+import "./lib/bar/BarToken" prefix BarToken_;
 
 export enum Token { foo, bar }
 
 export sealed ledger admin: ZswapCoinPublicKey;
 export ledger alreadyMinted: Set<ZswapCoinPublicKey>;
 export ledger liquidityProviders: Map<[ZswapCoinPublicKey, Token], Uint<128>>; // (user, token_color) -> amount
-sealed ledger claimAmount: Uint<128>;
+export sealed ledger claimAmount: Uint<128>;
 
 witness amountsToSwap(): [Uint<128>, Uint<128>]; // [amountToBuy, amountToSell]
 
@@ -19,7 +19,7 @@ circuit safeAdd<#n>(a: Uint<n>, b: Uint<n>): Uint<n> {
 
 export circuit padTokenAmount(amount: Uint<128>): Uint<128> {
     // Pads the token amount to 18 decimal places
-    return amount * 100000000000000000000 as Uint<128>;
+    return amount * 1000000000000000000 as Uint<128>;
 }
 
 constructor(
@@ -27,18 +27,19 @@ constructor(
     symbols: [Opaque<"string">, Opaque<"string">],
     fixedSupply: Uint<128>
 ) {
+    const $fixedSupply = disclose(padTokenAmount(fixedSupply));
     FooToken_initialize(names[0], symbols[0], 18);
     BarToken_initialize(names[1], symbols[1], 18);
     admin = ownPublicKey();
     // the total supply is owned by the contract
-    FooToken__mint(
-        right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
-        fixedSupply
-    );
-    BarToken__mint(
-        right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
-        fixedSupply
-    );
+    // FooToken__unsafeMint(
+    //     right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
+    //     fixedSupply
+    // );
+    const contractAddress = right<ZswapCoinPublicKey, ContractAddress>(kernel.self());
+    FooToken__balances.insert(contractAddress, $fixedSupply);
+    FooToken__balances.insert(left<ZswapCoinPublicKey, ContractAddress>(admin), padTokenAmount(1000000));
+    BarToken__balances.insert(contractAddress, $fixedSupply);
     claimAmount = padTokenAmount(100);
 }
 
@@ -224,4 +225,17 @@ export circuit swap(from: Token): [Field, Field] {
     const newFooPool = FooToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress));
     const newBarPool = BarToken_balanceOf(right<ZswapCoinPublicKey, ContractAddress>(contractAddress));
     return [newFooPool, newBarPool];
+}
+
+export circuit whoIsTheAdmin(): ZswapCoinPublicKey {
+    return admin;
+}
+
+export circuit balanceOf(address: Either<ZswapCoinPublicKey, ContractAddress>, token: Token): Uint<128> {
+    const $token = disclose(token);
+    if ($token == Token.foo) {
+        return FooToken_balanceOf(address);
+    } else {
+        return BarToken_balanceOf(address);
+    }
 }
