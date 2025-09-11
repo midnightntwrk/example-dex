@@ -10,6 +10,9 @@ import {
   type ContractAddress,
   left
 } from "../api";
+import { encodeContractAddress } from "@midnight-ntwrk/compact-runtime";
+
+const Token = contractRunTime.Token;
 
 beforeAll(() => {
   // Verify FungibleToken.compact file integrity
@@ -73,8 +76,7 @@ describe("Contract Runtime Tests", () => {
 
 describe("Contract must be constructed correctly", () => {
   const fixedSupply = 20_000_000n;
-  const contract = new ContractSimulator(fixedSupply);
-  const contractAddress = new Uint8Array(32);
+  const contract = new ContractSimulator();
 
   it("must verify that the contract is set with the right ledger values", () => {
     const ledger = contract.getLedger();
@@ -84,28 +86,54 @@ describe("Contract must be constructed correctly", () => {
     expect(ledger.claimAmount).toEqual(ContractSimulator.pad(100n));
   });
 
-  it("must verify the admin holds the right balance", () => {
-    const ledger = contract.getLedger();
+  it("must verify the initial balances are correct", () => {
+    const ledger = contract.mintInitialBalances(fixedSupply);
     const admin = ledger.admin;
+    // $FOO balance for admin
     const adminFooBalance = contract.balanceOf(
       left<ZswapCoinPublicKey, ContractAddress>(admin, {
         bytes: new Uint8Array(32)
       }),
-      contractRunTime.Token.foo
+      Token.foo
     );
-    expect(ContractSimulator.unpad(adminFooBalance)).toEqual(1_000_000n);
-  });
-
-  it("must verify the contract holds the right balances", () => {
+    expect(adminFooBalance).toEqual(ContractSimulator.pad(1_000_000n));
+    // $BAR balance for admin
+    const adminBarBalance = contract.balanceOf(
+      left<ZswapCoinPublicKey, ContractAddress>(admin, {
+        bytes: new Uint8Array(32)
+      }),
+      Token.bar
+    );
+    expect(adminBarBalance).toEqual(ContractSimulator.pad(1_000_000n));
+    // $FOO balance for contract
     const contractFooBalance = contract.balanceOf(
       right<ZswapCoinPublicKey, ContractAddress>(
         {
-          bytes: contractAddress
+          bytes: encodeContractAddress(contract.address)
         },
-        { bytes: new Uint8Array(32) }
+        {
+          bytes: new Uint8Array(32)
+        }
       ),
-      contractRunTime.Token.foo
+      Token.foo
     );
     expect(ContractSimulator.unpad(contractFooBalance)).toEqual(fixedSupply);
+    // $BAR balance for contract
+    const contractBarBalance = contract.balanceOf(
+      right<ZswapCoinPublicKey, ContractAddress>(
+        {
+          bytes: encodeContractAddress(contract.address)
+        },
+        {
+          bytes: new Uint8Array(32)
+        }
+      ),
+      Token.bar
+    );
+    expect(ContractSimulator.unpad(contractBarBalance)).toEqual(fixedSupply);
+  });
+
+  it("must let admin claim tokens", () => {
+    const ledger = contract.claim(Token.foo);
   });
 });

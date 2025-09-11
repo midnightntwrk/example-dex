@@ -48,7 +48,7 @@ export class ContractSimulator {
   readonly address: string;
   circuitContext: CircuitContext<ContractPrivateState>;
 
-  constructor(fixedSupply: bigint) {
+  constructor() {
     this.contract = new Contract<ContractPrivateState>(witnesses);
     const initialPrivateState = { amountToBuy: 69n, amountToSell: 420n };
     const context = constructorContext(
@@ -60,12 +60,7 @@ export class ContractSimulator {
       currentPrivateState,
       currentContractState,
       currentZswapLocalState
-    } = this.contract.initialState(
-      context,
-      ["foo", "bar"],
-      ["$FOO", "$BAR"],
-      fixedSupply
-    );
+    } = this.contract.initialState(context, ["foo", "bar"], ["$FOO", "$BAR"]);
     this.circuitContext = {
       currentPrivateState,
       currentZswapLocalState,
@@ -103,6 +98,14 @@ export class ContractSimulator {
 
   public getPrivateState(): ContractPrivateState {
     return this.circuitContext.currentPrivateState;
+  }
+
+  public mintInitialBalances(fixedSupply: bigint): Ledger {
+    this.circuitContext = this.contract.impureCircuits.mintInitialBalances(
+      this.circuitContext,
+      fixedSupply
+    ).context;
+    return ledger(this.circuitContext.transactionContext.state);
   }
 
   public claim(token: Token): Ledger {

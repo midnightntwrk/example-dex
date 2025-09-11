@@ -25,12 +25,17 @@ export circuit padTokenAmount(amount: Uint<128>): Uint<128> {
 constructor(
     names: [Opaque<"string">, Opaque<"string">],
     symbols: [Opaque<"string">, Opaque<"string">],
-    fixedSupply: Uint<128>
+    
 ) {
-    const $fixedSupply = disclose(padTokenAmount(fixedSupply));
     FooToken_initialize(names[0], symbols[0], 18);
     BarToken_initialize(names[1], symbols[1], 18);
     admin = ownPublicKey();
+    claimAmount = padTokenAmount(100);
+}
+
+export circuit mintInitialBalances(fixedSupply: Uint<128>): [] {
+    assert(ownPublicKey() == admin, "Only admin can mint initial balances");
+    const $fixedSupply = disclose(padTokenAmount(fixedSupply));
     // the total supply is owned by the contract
     // FooToken__unsafeMint(
     //     right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
@@ -38,9 +43,9 @@ constructor(
     // );
     const contractAddress = right<ZswapCoinPublicKey, ContractAddress>(kernel.self());
     FooToken__balances.insert(contractAddress, $fixedSupply);
-    FooToken__balances.insert(left<ZswapCoinPublicKey, ContractAddress>(admin), padTokenAmount(1000000));
     BarToken__balances.insert(contractAddress, $fixedSupply);
-    claimAmount = padTokenAmount(100);
+    FooToken__balances.insert(left<ZswapCoinPublicKey, ContractAddress>(admin), padTokenAmount(1000000));
+    BarToken__balances.insert(left<ZswapCoinPublicKey, ContractAddress>(admin), padTokenAmount(1000000));
 }
 
 // users can claim 100 tokens of one type
